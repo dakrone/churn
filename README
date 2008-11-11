@@ -1,0 +1,20 @@
+Churn is used to churn a number of files by a % changerate.
+
+Example:
+
+./churn -v 10% /path/to/files
+
+This will create files adding 10% total space to the file path.
+
+./churn -d -v 20% /path/to/files
+
+This will change 20% of the total size of data, by deleting files and
+creating newer ones, to simulate daily data change rates.
+
+You will need to set 3 options in the churn script before running it:
+
+MIN_SIZE - Minimum filesize to be created
+MAX_SIZE - Maximum filesize to be created
+MAX_FILES_PER_DIRECTORY - Maximum files per data directory
+
+Churn requires 'dd' to be in your path as well as access to /dev/urandom

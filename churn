@@ -1,0 +1,269 @@
+#!/usr/bin/env ruby
+# Churn - churn data by % change rate
+#
+# ./churn -d -v 2% /path/to/testdata
+#
+# It's worth noting that if 5% were speicifed:
+#   If -d is specified, at LEAST 5% of the bytes will be deleted.
+#   If -d is specified, at LEAST the number of deleted bytes will be created.
+#   If -d is NOT specified, on AVERAGE, 5% new data will be created.
+#
+# or ./churn -h
+
+#############################################################################
+## These are values for the data being generated, please change accordingly
+# Minimum size in kilobytes
+MIN_SIZE = 100
+# Maximum size if kilobytes
+MAX_SIZE = 200
+# Maximum files per directory for newly created data.
+MAX_FILES_PER_DIRECTORY = 10000
+#############################################################################
+
+require 'find'
+require 'fileutils'
+
+def print_usage
+      STDERR.puts "Usage:"
+      STDERR.puts "./churn.rb [-h] [-d] [-v] <n>% </tmp/data> "
+      STDERR.puts "\n -h  -  Display usage"
+      STDERR.puts " -d  -  Delete files to keep amount of data almost the same."
+      STDERR.puts " -v  -  Verbose (recommended)"
+      STDERR.puts " <n> -  Change rate in %"
+      STDERR.puts " </tmp/data> - Location of test data files"
+
+end
+
+## Given a directory, return a list of all the files in the directory
+def get_list_of_files(dir)
+      if dir.nil?
+            STDERR.puts "[!] Error: Directory not specified!"
+            print_usage
+            exit(0)
+      end
+
+      print "[+] Generating list of files in #{dir}..." if $verbose
+
+      filelist = []
+      Find.find(dir) do |f|
+            filelist.push(File.expand_path(f)) unless File.directory?(f)
+            #puts "Found: #{f}" if ($verbose and !File.directory?(f))
+      end
+
+      puts "Done." if $verbose
+
+      return filelist
+end
+
+## Given a list of files, find out how much space they take up
+def get_current_size(filelist)
+      print "[+] Calculating current data size..." if $verbose
+      total_size = 0
+      filelist.each do |f|
+            total_size = total_size + File.size(f)
+      end
+      puts "Done. (#{total_size} bytes)" if $verbose
+
+      return total_size
+end
+
+## Given a byte count and list of files, randomly delete files until the byte
+## count has been reduced by at least <count> bytes
+def select_and_delete(count, filelist)
+      print "[+] Randomly deleting at least #{count} " if $verbose
+      print "bytes worth of files..." if $verbose
+
+      freed_bytes = 0
+      while (freed_bytes < count)
+            f = filelist.fetch(rand(filelist.length))
+            fsize = File.size(f)
+            #puts "Deleteing: #{f}"
+            begin
+                  File.delete(f)
+            rescue
+                  STDERR.puts "\n[!] Error: Unable to delete file: #{f}"
+                  fsize = 0
+            end
+            # Increase the number of bytes we've freed
+            freed_bytes = freed_bytes + fsize
+            # Remove it from the file array
+            filelist.delete(f)
+      end
+
+      puts "Done. #{freed_bytes} bytes freed." if $verbose
+      return freed_bytes
+end
+
+## Given a directory, clean all the other direcotries below it with no files
+def clean_empty_directories(dir)
+      print "[+] Cleaning directory #{dir} of empty directories..." if $verbose
+
+      dcount = 0
+      Find.find(dir) do |f|
+            if File.directory?(f)
+                  # 2 is used because of '.' and '..'
+                  if Dir.entries(f).length <= 2
+                        # Directory is empty, clean it up
+                        Dir.delete(f)
+                        dcount = dcount + 1
+                  end
+            end
+      end
+
+
+      puts "Done. Removed #{dcount} empty directories." if $verbose
+end
+
+## Given a location, min/max size, number of files and number of directories,
+## actually generate the datafiles. Take from ruby-datasuite
+def generate_data(loc, minsize, maxsize, filenum, dirnum)
+      fpd = filenum / dirnum
+      print "\n" if $verbose
+      puts "[+] Checking paramaters..." if $verbose
+      #if !File.exist?(loc) and !File.directory?(loc)
+      #puts "\n[Error] File #{loc} doesn't exist or isn't a directory!"
+      #return
+      #end
+      if minsize < 1 or maxsize < minsize or filenum < 1
+            STDERR.puts "[!] Error: I can't work with sizes like that!"
+            return
+      end
+      if dirnum > filenum
+            STDERR.puts "[!] Error: Can't have more directories than files!"
+            return
+      end
+
+      puts "[+] Generating data..." if $verbose
+
+      fncount = 0
+
+      for i in 0..(dirnum-1) do
+            dname = loc + "/dir" + ("0"*(8-(i.to_s.length))).to_s + i.to_s
+            puts "[+] Making #{dname} and populating it with data..." if $verbose
+            if File.directory?(dname)
+                  puts "directory #{dname} already exists, skipping" if $verbose
+            else
+                  begin
+                        FileUtils.mkdir_p(dname)
+                  rescue
+                        STDERR.puts "[!] Error: Creating directory: #{$!}"
+                  end
+            end
+
+            for j in 0..(fpd-1) do
+                  fname = dname + "/file" + ("0"*(8-(fncount.to_s.length))).to_s + fncount.to_s
+                  fncount = fncount + 1
+                  fsize = minsize + rand(maxsize-minsize)
+                  begin
+                        system("dd if=/dev/urandom of=#{fname} bs=1024 count=#{fsize} 2> /dev/null")
+                  rescue
+                        STDERR.puts "[!] Error: Creating file: #{$!}"
+                  end
+                  if $? != 0
+                        STDERR.puts "[!] Error: There was an error creating '#{fname}'"
+                  end
+
+            end
+
+      end
+
+      puts "[+] Done generating data." if $verbose
+
+end
+
+## Given a count, create new datafiles that create at least <count> number
+## of bytes in directory <dir>.
+def create_new_datafiles(count, dir)
+      puts "[-] Creating at least #{count} bytes of new files..." if $verbose
+      new_bytes = 0
+      new_dir = dir + "/" + "churn_" + Time.now.to_i.to_s
+
+      avg_size = (MAX_SIZE + MIN_SIZE) / 2.0
+      puts " | Average filesize: #{avg_size} kilobytes." if $verbose 
+
+      needed_file_num = (count / (avg_size*1024)).to_i
+      if (needed_file_num < 1)
+            STDERR.puts "[!] Error: Minimum and Maximum filesize must be "
+            STDERR.puts "lowered, or change rate raised."
+            exit(-1)
+      end
+      puts " | Need ~#{needed_file_num} files created." if $verbose
+
+      dir_num = needed_file_num / MAX_FILES_PER_DIRECTORY
+      # Make at least 1 directory
+      dir_num = 1 if (dir_num < 1)
+      puts " | #{dir_num} directories will be created." if $verbose
+
+      puts " | Checking for 'dd' in PATH." if $verbose
+      system("which dd > /dev/null")
+      if ($? != 0)
+            STDERR.puts "[!] Error: I can't find the 'dd' program!"
+            exit(-1)
+      end
+
+      puts " `- Generating files..." if $verbose 
+      generate_data(new_dir,MIN_SIZE,MAX_SIZE,needed_file_num,dir_num)
+
+      puts "[+] File generation complete." if $verbose
+end
+
+#############################################################################
+#############################################################################
+#############################################################################
+
+## Main {{{
+puts "\n---=| Churn! |=---"
+print "\n"
+
+help = ARGV.include?("-h")
+if help
+      print_usage
+      exit(0)
+end
+
+$verbose = ARGV.include?("-v")
+ARGV.delete("-v") if $verbose
+delete = ARGV.include?("-d")
+ARGV.delete("-d") if delete
+
+# Churn rate
+cRate = ARGV[0].delete("%").to_i
+# Directory
+dir = ARGV[1]
+
+if cRate < 1
+      STDERR.puts "[!] Error: Churn rate cannot be lower than 1%"
+      exit(-1)
+end
+if !File.exist?(dir)
+      STDERR.puts "[!] Error: Data directory does not exist!"
+      exit(-1)
+end
+
+puts "[-] Verbose: #{$verbose}" if $verbose
+puts "[-] Delete: #{delete}" if $verbose
+puts "[-] Churn rate: #{cRate} %" if $verbose
+puts "[-] Directory: #{dir}" if $verbose
+
+puts "\n[+] Beginning churn...\n\n" if $verbose
+
+filelist = []
+filelist = get_list_of_files(dir)
+
+current_size = get_current_size(filelist)
+
+new_byte_count = current_size * (cRate/100.0)
+
+puts "[+] New byte count will be: #{new_byte_count} bytes." if $verbose
+
+if delete
+      new_byte_count = select_and_delete(new_byte_count, filelist)
+end
+
+clean_empty_directories(dir)
+
+create_new_datafiles(new_byte_count,dir)
+
+puts "\n[+] Completed churn." if $verbose
+
+## End Main }}}
