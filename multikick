@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+
+require 'timeout'
+
+# The base location of all the scripts
+baseloc = "."
+# A list of scripts to be executed
+scriptlist = ["test1.sh",
+              "test2.sh",
+              "test3.sh",
+              "test4.sh",
+              "test5.sh",
+              "test6.sh",
+              "test7.sh",
+              "test8.sh"]
+
+##########################################################
+
+$threads = []
+
+trap "SIGTERM", proc {
+      puts "Caught SIGTERM, killing threads and exiting..."
+      begin
+      Timeout::timeout(10) do
+            $thread.each { |t|
+                  t.terminate
+            }
+      end
+      rescue Timeout::Error
+            $thread.each { |t|
+                  t.kill!
+            }
+      end
+      exit(0)
+} 
+
+scriptlist.each { |script|
+      # create log file
+      system("touch #{baseloc}/#{script}.log")
+
+      $threads << Thread.new { $SAFE=0
+            IO.popen("#{baseloc}/#{script}") { |lines|
+                  lines.each { |line|
+                        `echo "#{line.to_s}" >> #{baseloc}/#{script}.log`
+                  }
+            }
+      }
+      puts "Thread spawned for #{script}"
+}
+
+puts "Waiting for all threads to complete..."
+$threads.each { |t|
+      t.join
+}
