@@ -43,6 +43,7 @@ def get_list_of_files(dir)
       end
 
       print "[+] Generating list of files in #{dir}..." if $verbose
+      STDOUT.flush
 
       filelist = []
       Find.find(dir) do |f|
@@ -58,6 +59,7 @@ end
 ## Given a list of files, find out how much space they take up
 def get_current_size(filelist)
       print "[+] Calculating current data size..." if $verbose
+      STDOUT.flush
       total_size = 0
       filelist.each do |f|
             total_size = total_size + File.size(f)
@@ -72,6 +74,7 @@ end
 def select_and_delete(count, filelist)
       print "[+] Randomly deleting at least #{count} " if $verbose
       print "bytes worth of files..." if $verbose
+      STDOUT.flush
 
       freed_bytes = 0
       while (freed_bytes < count)
@@ -97,6 +100,7 @@ end
 ## Given a directory, clean all the other direcotries below it with no files
 def clean_empty_directories(dir)
       print "[+] Cleaning directory #{dir} of empty directories..." if $verbose
+      STDOUT.flush
 
       dcount = 0
       Find.find(dir) do |f|
@@ -214,6 +218,7 @@ end
 ## Main {{{
 puts "\n---=| Churn! |=---"
 print "\n"
+STDOUT.flush
 
 help = ARGV.include?("-h")
 if help

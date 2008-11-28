@@ -7,48 +7,55 @@ baseloc = "."
 # A list of scripts to be executed
 scriptlist = ["test1.sh",
               "test2.sh",
-              "test3.sh",
-              "test4.sh",
-              "test5.sh",
-              "test6.sh",
-              "test7.sh",
-              "test8.sh"]
+              "test3.sh"]
 
 ##########################################################
 
 $threads = []
 
-trap "SIGTERM", proc {
-      puts "Caught SIGTERM, killing threads and exiting..."
+def shutdown
+      STDERR.print "Shutting down threads..."
+      STDERR.flush
       begin
-      Timeout::timeout(10) do
-            $thread.each { |t|
-                  t.terminate
-            }
-      end
+            Timeout::timeout(10) do
+                  $threads.each { |t|
+                        t.terminate
+                  }
+            end
       rescue Timeout::Error
-            $thread.each { |t|
+            $threads.each { |t|
                   t.kill!
             }
       end
+      STDERR.puts "Done."
       exit(0)
+end
+
+trap "SIGTERM", proc {
+      STDERR.puts "Caught SIGTERM, killing threads and exiting..."
+      shutdown()
 } 
-
-scriptlist.each { |script|
-      # create log file
-      system("touch #{baseloc}/#{script}.log")
-
-      $threads << Thread.new { $SAFE=0
-            IO.popen("#{baseloc}/#{script}") { |lines|
-                  lines.each { |line|
-                        `echo "#{line.to_s}" >> #{baseloc}/#{script}.log`
+begin
+      scriptlist.each { |script|
+            $threads << Thread.new { $SAFE=0
+                  f = File.open("#{baseloc}/#{script}.log", 'a+')
+                  IO.popen("#{baseloc}/#{script} 2>&1") { |lines|
+                        lines.each { |line|
+                              f.write(line)
+                        }
                   }
+                  f.close
             }
+            puts "Thread spawned for #{script}, see #{baseloc}/#{script}.log for output"
       }
-      puts "Thread spawned for #{script}"
-}
 
-puts "Waiting for all threads to complete..."
-$threads.each { |t|
-      t.join
-}
+      print "Threads processing..."
+      STDOUT.flush
+      $threads.each { |t|
+            t.join
+      }
+      puts "Finished."
+
+rescue Interrupt
+      shutdown()
+end
