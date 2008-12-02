@@ -221,7 +221,7 @@ print "\n"
 STDOUT.flush
 
 help = ARGV.include?("-h")
-if help
+if help or ARGV.length < 1
       print_usage
       exit(0)
 end
