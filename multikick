@@ -36,17 +36,14 @@ trap "SIGTERM", proc {
       shutdown()
 } 
 begin
+      if !File.directory?("./logs")
+            Dir.mkdir("./logs")
+      end
       scriptlist.each { |script|
-            $threads << Thread.new { $SAFE=0
-                  f = File.open("#{baseloc}/#{script}.log", 'a+')
-                  IO.popen("#{baseloc}/#{script} 2>&1") { |lines|
-                        lines.each { |line|
-                              f.write(line)
-                        }
-                  }
-                  f.close
+            $threads << Thread.new { $SAFE=1
+                  system("#{baseloc}/#{script} > #{baseloc}/#{script}.stdout.log 2> #{baseloc}/#{script}.stderr.log")
             }
-            puts "Thread spawned for #{script}, see #{baseloc}/#{script}.log for output"
+            puts "Thread spawned for #{script}, see #{baseloc}/#{script}.stdout.log #{baseloc}/#{script}.stderr.log for output"
       }
 
       print "Threads processing..."

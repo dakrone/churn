@@ -232,7 +232,7 @@ delete = ARGV.include?("-d")
 ARGV.delete("-d") if delete
 
 # Churn rate
-cRate = ARGV[0].delete("%").to_i
+cRate = ARGV[0].delete("%").to_f
 # Directory
 dir = ARGV[1]
 
