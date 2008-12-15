@@ -236,8 +236,8 @@ cRate = ARGV[0].delete("%").to_f
 # Directory
 dir = ARGV[1]
 
-if cRate < 1
-      STDERR.puts "[!] Error: Churn rate cannot be lower than 1%"
+if cRate < 0
+      STDERR.puts "[!] Error: Churn rate cannot be lower than 0%"
       exit(-1)
 end
 if !File.exist?(dir)
